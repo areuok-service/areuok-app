@@ -1,0 +1,8 @@
+# Tauri Configuration
+# For more information, see https://v2.tauri.app/config/
+
+[hitokoto]
+# Note: If using external APIs, configure keys via environment variables
+# Never commit actual API keys to the repository
+# id = "your-id-here"
+# key = "your-key-here"

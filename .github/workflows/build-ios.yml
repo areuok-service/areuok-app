@@ -1,0 +1,58 @@
+name: Build iOS
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize iOS project
+        run: |
+          pnpm tauri ios init
+
+      - name: Build iOS (Development)
+        if: github.event_name == 'pull_request'
+        run: |
+          pnpm tauri ios build --debug
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ios-app
+          path: |
+            src-tauri/gen/apple/**/*.ipa
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+.svelte-kit/
+src-tauri/target/
+package-lock.json
+pnpm-lock.yaml
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/
+*.md

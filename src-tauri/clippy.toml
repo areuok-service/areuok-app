@@ -1,0 +1,20 @@
+# Clippy configuration for areuok project
+
+# Deny common mistakes
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+verbose-bit-mask-threshold = 1
+
+# Pedantic lints (uncomment to enable stricter checking)
+# - pedantic
+
+# Allow certain pedantic lints
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-dbg-in-tests = true
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Disallowed methods
+# disallowed-methods = []

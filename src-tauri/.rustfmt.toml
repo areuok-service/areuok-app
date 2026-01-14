@@ -1,0 +1,43 @@
+# Rustfmt configuration for areuok project
+
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+
+# Style
+use_field_init_shorthand = true
+use_try_shorthand = true
+format_code_in_doc_comments = true
+format_strings = true
+normalize_comments = true
+normalize_doc_attributes = true
+wrap_comments = true
+comment_width = 100
+
+# Structs
+struct_field_align_threshold = 0
+struct_lit_single_line = true
+
+# Functions
+fn_args_layout = "Tall"
+fn_call_width = 80
+
+# Chains
+chain_width = 60
+single_line_if_else_max_width = 50
+
+# Error handling
+error_on_line_overflow = true
+error_on_unformatted = false
+
+# Misc
+merge_derives = true
+remove_nested_parens = true
+reorder_impl_items = true
+use_small_heuristics = "Default"
+newline_style = "Unix"

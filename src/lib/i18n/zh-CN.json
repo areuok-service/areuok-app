@@ -1,0 +1,82 @@
+{
+  "app": {
+    "title": "你还好吗？",
+    "subtitle": "记录你的每日健康打卡"
+  },
+  "login": {
+    "namePlaceholder": "你叫什么名字？",
+    "nameLabel": "姓名",
+    "startButton": "开始新的一天",
+    "registerButton": "注册设备"
+  },
+  "mode": {
+    "signin": "签到模式",
+    "supervisor": "监督模式"
+  },
+  "tabs": {
+    "signin": "我的签到",
+    "supervision": "监督"
+  },
+  "dashboard": {
+    "greeting": "你好，{name}",
+    "status": "今天已打卡！",
+    "streakLabel": "连续打卡天数",
+    "viewQuote": "查看每日一言",
+    "signinButton": "今日签到"
+  },
+  "supervision": {
+    "title": "监督面板 - {name}",
+    "subtitle": "监控和管理被监督设备",
+    "addDevice": "添加监督设备",
+    "deviceId": "设备ID",
+    "deviceIdPlaceholder": "输入要监督的设备ID",
+    "search": "按设备名称搜索",
+    "searchPlaceholder": "输入设备名称搜索...",
+    "sendRequest": "发送请求",
+    "requestSent": "监督请求已发送！",
+    "supervisedDevices": "被监督的设备",
+    "noSupervisedDevices": "暂无被监督设备",
+    "selectedDevice": "已选择设备",
+    "noDeviceSelected": "未选择设备",
+    "streak": "连续 {streak} 天",
+    "checkedInToday": "今天已签到",
+    "notCheckedInToday": "今天未签到",
+    "remove": "移除",
+    "pendingRequests": "待处理监督请求",
+    "noPendingRequests": "暂无待处理请求",
+    "wantsToSupervise": "想要监督你",
+    "accept": "接受",
+    "reject": "拒绝",
+    "confirmRemove": "确定要移除此监督关系吗？"
+  },
+  "settings": {
+    "title": "邮件通知",
+    "enableNotifications": "启用通知",
+    "toEmail": "收件人邮箱",
+    "smtpServer": "SMTP服务器",
+    "port": "端口",
+    "username": "用户名",
+    "password": "密码",
+    "fromEmail": "发件人邮箱",
+    "cancel": "取消",
+    "save": "保存设置",
+    "saveSuccess": "设置保存成功！",
+    "saveFailed": "保存设置失败，请重试。"
+  },
+  "quote": {
+    "authorPrefix": "——"
+  },
+  "actions": {
+    "settings": "设置",
+    "signOut": "退出",
+    "close": "关闭"
+  },
+  "language": {
+    "title": "语言",
+    "en": "English",
+    "zhCN": "中文"
+  },
+  "common": {
+    "loading": "加载中..."
+  }
+}

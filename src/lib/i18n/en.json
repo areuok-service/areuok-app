@@ -1,0 +1,83 @@
+{
+  "app": {
+    "title": "Are you OK?",
+    "subtitle": "Track your daily wellness streak"
+  },
+  "login": {
+    "namePlaceholder": "What's your name?",
+    "nameLabel": "Name",
+    "startButton": "Start Your Day",
+    "registerButton": "Register Device"
+  },
+  "mode": {
+    "signin": "Sign-in Mode",
+    "supervisor": "Supervisor Mode"
+  },
+  "tabs": {
+    "signin": "My Sign-in",
+    "supervision": "Supervision"
+  },
+  "dashboard": {
+    "greeting": "Hello, {name}",
+    "status": "You're checked in for today!",
+    "streakLabel": "Day Streak",
+    "viewQuote": "View Daily Quote",
+    "signinButton": "Sign In Today"
+  },
+  "supervision": {
+    "title": "Supervisor Dashboard - {name}",
+    "subtitle": "Monitor and manage supervised devices",
+    "addDevice": "Add Device to Supervise",
+    "deviceId": "Device ID",
+    "deviceIdPlaceholder": "Enter device ID to supervise",
+    "search": "Search by device name",
+    "searchPlaceholder": "Type device name to search...",
+    "sendRequest": "Send Request",
+    "requestSent": "Supervision request sent!",
+    "supervisedDevices": "Supervised Devices",
+    "noSupervisedDevices": "No devices being supervised yet",
+    "selectedDevice": "Selected Device",
+    "noDeviceSelected": "No device selected",
+    "streak": "{streak} day streak",
+    "checkedInToday": "Checked in today",
+    "notCheckedInToday": "Not checked in today",
+    "remove": "Remove",
+    "pendingRequests": "Pending Supervision Requests",
+    "noPendingRequests": "No pending requests",
+    "wantsToSupervise": "wants to supervise you",
+    "accept": "Accept",
+    "reject": "Reject",
+    "confirmRemove": "Are you sure you want to remove this supervision?"
+  },
+  "settings": {
+    "title": "Email Notifications",
+    "enableNotifications": "Enable Notifications",
+    "toEmail": "To Email",
+    "smtpServer": "SMTP Server",
+    "port": "Port",
+    "username": "Username",
+    "password": "Password",
+    "fromEmail": "From Email",
+    "cancel": "Cancel",
+    "save": "Save Settings",
+    "saveSuccess": "Settings saved successfully!",
+    "saveFailed": "Failed to save settings. Please try again."
+  },
+  "quote": {
+    "authorPrefix": "-"
+  },
+  "actions": {
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "close": "Close"
+  },
+  "language": {
+    "title": "Language",
+    "en": "English",
+    "zhCN": "中文"
+  },
+  "common": {
+    "loading": "Loading..."
+  }
+}
+

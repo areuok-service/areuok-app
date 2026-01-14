@@ -1,0 +1,84 @@
+name: Build Android
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Setup NDK
+        run: |
+          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
+
+      - name: Initialize Android project
+        run: |
+          pnpm tauri android init
+        env:
+          ANDROID_NDK_ROOT: ${ANDROID_HOME}/ndk/26.1.10909125
+
+      - name: Build Android APK
+        run: |
+          pnpm tauri android build --debug
+        env:
+          ANDROID_NDK_ROOT: ${ANDROID_HOME}/ndk/26.1.10909125
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: android-apk
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          retention-days: 30
+          if-no-files-found: warn
