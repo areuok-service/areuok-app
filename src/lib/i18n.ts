@@ -10,26 +10,26 @@ function getInitialLocale(): string {
   if (typeof window === 'undefined') {
     return 'en';
   }
-  
+
   // First check localStorage for user preference
   const savedLocale = localStorage.getItem('locale');
   if (savedLocale) {
     return savedLocale;
   }
-  
+
   // Then detect system language
   const browserLang = navigator.language || (navigator as any).userLanguage || '';
-  
+
   // Check for Chinese variants
   if (browserLang.startsWith('zh')) {
     return 'zh-CN';
   }
-  
+
   // Check for exact match
   if (browserLang === 'en' || browserLang.startsWith('en-')) {
     return 'en';
   }
-  
+
   // Default to English
   return 'en';
 }

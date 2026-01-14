@@ -52,10 +52,7 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
   const defaultOptions: RequestInit = {
@@ -83,7 +80,11 @@ async function apiRequest<T>(
 }
 
 export const deviceApi = {
-  register: async (deviceName: string, imei?: string, mode: DeviceMode = 'signin'): Promise<Device> => {
+  register: async (
+    deviceName: string,
+    imei?: string,
+    mode: DeviceMode = 'signin'
+  ): Promise<Device> => {
     return apiRequest<Device>('/devices/register', {
       method: 'POST',
       body: JSON.stringify({
