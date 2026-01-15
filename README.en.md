@@ -1,4 +1,4 @@
-# Are You OK? (areuok) - Open Source DAMUMU Alternative
+# Are U OK? (areuok) - Open Source DAMUMU Alternative
 
 English | [简体中文](./README.md)
 

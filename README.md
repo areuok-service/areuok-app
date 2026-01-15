@@ -1,4 +1,4 @@
-# Are You OK? (areuok) - 开源版死了么
+# Are U OK? (areuok) - 开源版死了么
 
 [English](./README.en.md) | 简体中文
 
