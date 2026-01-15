@@ -34,5 +34,8 @@
   },
   "files.associations": {
     "*.svelte": "svelte"
-  }
+  },
+  "i18n-ally.localesPaths": [
+    "src/lib/i18n"
+  ]
 }
