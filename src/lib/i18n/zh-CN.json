@@ -78,5 +78,24 @@
   },
   "common": {
     "loading": "加载中..."
+  },
+  "error": {
+    "registrationFailed": "注册失败",
+    "signinFailed": "签到失败",
+    "requestFailed": "请求失败",
+    "acceptFailed": "接受请求失败",
+    "rejectFailed": "拒绝请求失败",
+    "removeFailed": "移除监督失败",
+    "nameUpdateFailed": "修改昵称失败"
+  },
+  "success": {
+    "nameUpdated": "昵称修改成功",
+    "requestAccepted": "监督请求已接受",
+    "requestRejected": "监督请求已拒绝",
+    "relationRemoved": "监督关系已移除"
+  },
+  "notification": {
+    "permissionDenied": "通知权限被拒绝",
+    "permissionGranted": "通知权限已授予"
   }
 }

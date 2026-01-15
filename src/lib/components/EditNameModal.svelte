@@ -1,7 +1,6 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { fade, scale } from 'svelte/transition';
-  import { storage } from '../api';
 
   interface Props {
     currentName: string;
@@ -11,6 +10,7 @@
     onClose: () => void;
     onSubmit: (event: Event) => void;
     canUpdateName: () => boolean;
+    daysSinceUpdate: number;
   }
 
   let {
@@ -20,7 +20,8 @@
     editError,
     onClose,
     onSubmit,
-    canUpdateName
+    canUpdateName,
+    daysSinceUpdate
   }: Props = $props();
 
   function handleKeydown(e: KeyboardEvent) {
@@ -36,14 +37,6 @@
   function stopPropagation(e: Event) {
     e.stopPropagation();
   }
-
-  function getDaysSinceUpdate(): number {
-    const lastUpdate = storage.getLastNameUpdate();
-    if (!lastUpdate) return -1;
-    return Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  let daysSinceUpdate = $derived(getDaysSinceUpdate());
 </script>
 
 <div

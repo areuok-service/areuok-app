@@ -78,5 +78,24 @@
   },
   "common": {
     "loading": "Loading..."
+  },
+  "error": {
+    "registrationFailed": "Registration failed",
+    "signinFailed": "Sign in failed",
+    "requestFailed": "Request failed",
+    "acceptFailed": "Failed to accept request",
+    "rejectFailed": "Failed to reject request",
+    "removeFailed": "Failed to remove supervision",
+    "nameUpdateFailed": "Failed to update name"
+  },
+  "success": {
+    "nameUpdated": "Name updated successfully",
+    "requestAccepted": "Supervision request accepted",
+    "requestRejected": "Supervision request rejected",
+    "relationRemoved": "Supervision relationship removed"
+  },
+  "notification": {
+    "permissionDenied": "Notification permission denied",
+    "permissionGranted": "Notification permission granted"
   }
 }

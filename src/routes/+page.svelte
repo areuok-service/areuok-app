@@ -1,7 +1,5 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { deviceApi, supervisionApi, storage } from '../lib/api';
-  import type { DeviceMode, SupervisionRelation, SupervisionRequest, DeviceStatus, Device } from '../lib/api';
   import { fade } from 'svelte/transition';
   import { locale, _ } from 'svelte-i18n';
   import {
@@ -13,6 +11,130 @@
     SupervisionView,
     TabNav
   } from '../lib/components';
+  import Toast from '../lib/components/Toast.svelte';
+  import { toastStore } from '../lib/stores/toast';
+
+  type DeviceMode = 'signin' | 'supervisor';
+
+  const DEVICE_ID_KEY = 'areuok_device_id';
+  const DEVICE_NAME_KEY = 'areuok_device_name';
+  const DEVICE_MODE_KEY = 'areuok_device_mode';
+  const DEVICE_IMEI_KEY = 'areuok_device_imei';
+  const LAST_NAME_UPDATE_KEY = 'areuok_last_name_update';
+
+  const storage = {
+    getDeviceId: (): string | null => {
+      if (typeof window === 'undefined') return null;
+      return localStorage.getItem(DEVICE_ID_KEY);
+    },
+
+    setDeviceId: (id: string): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+    },
+
+    getDeviceName: (): string | null => {
+      if (typeof window === 'undefined') return null;
+      return localStorage.getItem(DEVICE_NAME_KEY);
+    },
+
+    setDeviceName: (name: string): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DEVICE_NAME_KEY, name);
+      }
+    },
+
+    getDeviceMode: (): 'signin' | 'supervisor' | null => {
+      if (typeof window === 'undefined') return null;
+      return localStorage.getItem(DEVICE_MODE_KEY) as 'signin' | 'supervisor' | null;
+    },
+
+    setDeviceMode: (mode: 'signin' | 'supervisor'): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DEVICE_MODE_KEY, mode);
+      }
+    },
+
+    getDeviceImei: (): string | null => {
+      if (typeof window === 'undefined') return null;
+      return localStorage.getItem(DEVICE_IMEI_KEY);
+    },
+
+    setDeviceImei: (imei: string): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DEVICE_IMEI_KEY, imei);
+      }
+    },
+
+    getLastNameUpdate: (): Date | null => {
+      if (typeof window === 'undefined') return null;
+      const value = localStorage.getItem(LAST_NAME_UPDATE_KEY);
+      return value ? new Date(value) : null;
+    },
+
+    setLastNameUpdate: (date: Date): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LAST_NAME_UPDATE_KEY, date.toISOString());
+      }
+    },
+
+    clearDevice: (): void => {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(DEVICE_ID_KEY);
+        localStorage.removeItem(DEVICE_NAME_KEY);
+        localStorage.removeItem(DEVICE_MODE_KEY);
+        localStorage.removeItem(DEVICE_IMEI_KEY);
+        localStorage.removeItem(LAST_NAME_UPDATE_KEY);
+      }
+    },
+  };
+
+  // Remote API types (matching server responses)
+  type Device = {
+    device_id: string;
+    device_name: string;
+    imei?: string;
+    mode: 'signin' | 'supervisor';
+    created_at: string;
+    last_seen_at: string;
+    last_name_updated_at?: string;
+  };
+
+  type SupervisionRequest = {
+    request_id: string;
+    supervisor_id: string;
+    supervisor_name?: string;
+    target_id: string;
+    target_name?: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    created_at: string;
+  };
+
+  type SupervisionRelation = {
+    relation_id: string;
+    supervisor_id: string;
+    supervisor_name?: string;
+    target_id: string;
+    target_name?: string;
+    created_at: string;
+  };
+
+  type DeviceStatus = {
+    device_id: string;
+    device_name: string;
+    mode: 'signin' | 'supervisor';
+    last_signin?: string;
+    streak: number;
+  };
+
+  // Helper function to check if signed in today
+  function isSignedInToday(lastSignin?: string): boolean {
+    if (!lastSignin) return false;
+    const signinDate = new Date(lastSignin);
+    const today = new Date();
+    return signinDate.toDateString() === today.toDateString();
+  }
 
   // Types
   interface Quote {
@@ -51,6 +173,21 @@
   let targetDeviceId = $state('');
   let requestError = $state('');
 
+  // Toast state
+  let toasts = $state<
+    Array<{ id: number; message: string; type: 'success' | 'error' | 'info' | 'warning'; duration: number }>
+  >([]);
+
+  // Toast store subscription
+  $effect(() => {
+    const unsubscribe = toastStore.subscribe((messages) => {
+      toasts = messages;
+    });
+    return () => {
+      unsubscribe();
+    };
+  });
+
   // Edit name modal state
   let showEditNameModal = $state(false);
   let newName = $state('');
@@ -88,7 +225,11 @@
         console.error('Failed to get IMEI:', e);
       }
 
-      const device = await deviceApi.register(name, imei, deviceMode);
+      const device = await invoke<Device>('device_register', {
+        deviceName: name,
+        imei: imei || null,
+        mode: deviceMode
+      });
       deviceId = device.device_id;
       storage.setDeviceId(device.device_id);
       storage.setDeviceName(name);
@@ -102,7 +243,7 @@
       await loadDailyQuote();
     } catch (error) {
       console.error('Registration failed:', error);
-      alert('Registration failed: ' + (error as Error).message);
+      toastStore.error($_('error.registrationFailed') + ': ' + (error as Error).message);
     } finally {
       isLoading = false;
     }
@@ -120,8 +261,16 @@
       deviceMode = savedMode;
 
       try {
-        const device = await deviceApi.getInfo(savedDeviceId);
+        const device = await invoke<Device>('device_get_info', { deviceId: savedDeviceId });
         view = 'dashboard';
+
+        // Check today's sign-in status
+        if (deviceMode === 'signin') {
+          const deviceStatus = await invoke<DeviceStatus>('device_get_status', { deviceId: savedDeviceId });
+          isSignedIn = isSignedInToday(deviceStatus.last_signin);
+          streak = deviceStatus.streak;
+        }
+
         await loadSupervisionData();
       } catch (error) {
         console.error('Failed to load device:', error);
@@ -140,22 +289,24 @@
     isLoadingSupervision = true;
     try {
       const [relations, requests] = await Promise.all([
-        supervisionApi.list(deviceId),
-        supervisionApi.getPending(deviceId)
+        invoke<SupervisionRelation[]>('supervision_list_api', { deviceId }),
+        invoke<SupervisionRequest[]>('supervision_get_pending', { deviceId })
       ]);
 
       supervisionList = relations;
       pendingRequests = requests;
 
       const newDeviceRelationMap = new Map<string, string>();
-      relations.forEach((rel) => {
+      relations.forEach((rel: SupervisionRelation) => {
         newDeviceRelationMap.set(rel.target_id, rel.relation_id);
       });
       deviceRelationMap = newDeviceRelationMap;
 
       if (relations.length > 0) {
         const deviceStatuses = await Promise.all(
-          relations.map((rel) => deviceApi.getStatus(rel.target_id))
+          relations.map((rel: SupervisionRelation) =>
+            invoke<DeviceStatus>('device_get_status', { deviceId: rel.target_id })
+          )
         );
         supervisedDevices = deviceStatuses;
       } else {
@@ -177,7 +328,7 @@
 
     try {
       await new Promise((r) => setTimeout(r, 800));
-      const result = await deviceApi.signin(deviceId);
+      const result = await invoke<{ streak: number }>('device_signin_api', { deviceId });
       isSignedIn = true;
       streak = result.streak;
 
@@ -186,7 +337,7 @@
       }, 500);
     } catch (error) {
       console.error(error);
-      alert('Sign in failed: ' + (error as Error).message);
+      toastStore.error($_('error.signinFailed') + ': ' + (error as Error).message);
     } finally {
       isLoading = false;
     }
@@ -198,7 +349,7 @@
     if (searchQuery.length < 2) return;
 
     try {
-      searchResults = await deviceApi.search(searchQuery);
+      searchResults = await invoke<Device[]>('device_search', { query: searchQuery });
       showSearchResults = true;
     } catch (error) {
       console.error('Search failed:', error);
@@ -221,8 +372,11 @@
     isLoading = true;
 
     try {
-      await supervisionApi.request(deviceId, targetDeviceId);
-      alert($_('supervision.requestSent'));
+      await invoke('supervision_request_api', {
+        supervisorId: deviceId,
+        targetId: targetDeviceId
+      });
+      toastStore.success($_('supervision.requestSent'));
       targetDeviceId = '';
       searchQuery = '';
       searchResults = [];
@@ -231,6 +385,7 @@
       tabView = 'supervision';
     } catch (error) {
       requestError = (error as Error).message;
+      toastStore.error($_('error.requestFailed') + ': ' + (error as Error).message);
     } finally {
       isLoading = false;
     }
@@ -241,10 +396,14 @@
     if (!deviceId) return;
 
     try {
-      await supervisionApi.accept(request.supervisor_id, request.target_id);
+      await invoke('supervision_accept_api', {
+        supervisorId: request.supervisor_id,
+        targetId: request.target_id
+      });
+      toastStore.success($_('supervision.requestAccepted'));
       await loadSupervisionData();
     } catch (error) {
-      alert('Failed to accept request: ' + (error as Error).message);
+      toastStore.error($_('error.acceptFailed') + ': ' + (error as Error).message);
     }
   }
 
@@ -253,10 +412,14 @@
     if (!deviceId) return;
 
     try {
-      await supervisionApi.reject(request.supervisor_id, request.target_id);
+      await invoke('supervision_reject_api', {
+        supervisorId: request.supervisor_id,
+        targetId: request.target_id
+      });
+      toastStore.success($_('supervision.requestRejected'));
       await loadSupervisionData();
     } catch (error) {
-      alert('Failed to reject request: ' + (error as Error).message);
+      toastStore.error($_('error.rejectFailed') + ': ' + (error as Error).message);
     }
   }
 
@@ -268,10 +431,11 @@
     if (!confirm($_('supervision.confirmRemove'))) return;
 
     try {
-      await supervisionApi.remove(relationId);
+      await invoke('supervision_remove_api', { relationId });
+      toastStore.success($_('supervision.relationRemoved'));
       await loadSupervisionData();
     } catch (error) {
-      alert('Failed to remove supervision: ' + (error as Error).message);
+      toastStore.error($_('error.removeFailed') + ': ' + (error as Error).message);
     }
   }
 
@@ -363,16 +527,21 @@
     editError = '';
 
     try {
-      const device = await deviceApi.updateName(deviceId, newName);
+      const device = await invoke<Device>('device_update_name_api', {
+        deviceId,
+        newName
+      });
       name = device.device_name;
       storage.setDeviceName(name);
       storage.setLastNameUpdate(new Date());
 
       showEditNameModal = false;
       newName = '';
+      toastStore.success($_('success.nameUpdated'));
     } catch (error) {
       console.error('Failed to update name:', error);
-      editError = '修改昵称失败: ' + (error as Error).message;
+      editError = $_('error.nameUpdateFailed') + ': ' + (error as Error).message;
+      toastStore.error($_('error.nameUpdateFailed') + ': ' + (error as Error).message);
     } finally {
       isLoading = false;
     }
@@ -439,16 +608,32 @@
   {/if}
 
   {#if showEditNameModal}
-    <EditNameModal
-      currentName={name}
-      bind:newName
-      {isLoading}
-      {editError}
-      onClose={closeEditNameModal}
-      onSubmit={handleNameUpdate}
-      {canUpdateName}
-    />
+      <EditNameModal
+        currentName={name}
+        bind:newName
+        {isLoading}
+        {editError}
+        onClose={closeEditNameModal}
+        onSubmit={handleNameUpdate}
+        {canUpdateName}
+        daysSinceUpdate={
+          (() => {
+            const lastUpdate = storage.getLastNameUpdate();
+            if (!lastUpdate) return -1;
+            return Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+          })()
+        }
+      />
   {/if}
+
+  {#each toasts as toast (toast.id)}
+    <Toast
+      message={toast.message}
+      type={toast.type}
+      duration={toast.duration}
+      onDismiss={() => toastStore.dismiss(toast.id)}
+    />
+  {/each}
 </main>
 
 <style>

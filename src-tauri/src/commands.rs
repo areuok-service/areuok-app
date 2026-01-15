@@ -5,10 +5,21 @@
 
 use chrono::{NaiveDate, Utc};
 use uuid::Uuid;
+use tauri_plugin_notification::NotificationExt;
 
+use crate::api_client::{
+    accept_supervision_request_api, device_signin, get_device, get_device_status,
+    get_pending_requests, get_supervision_list, register_device, reject_supervision_request_api,
+    remove_supervision_relationship_api, search_devices, send_supervision_request_api,
+    update_device_name as update_device_name_api,
+};
 use crate::models::{
     DeviceConfig, DeviceMode, DeviceStatus, EmailConfig, Quote, SigninData,
     SupervisionRelationship, SupervisionRequest, SupervisionRequestStatus, SupervisorStatus,
+};
+use crate::remote_models::{
+    Device as RemoteDevice, DeviceMode as RemoteDeviceMode, DeviceStatus as RemoteDeviceStatus,
+    SigninResponse, SupervisionRelation, SupervisionRequest as RemoteSupervisionRequest,
 };
 use crate::services::{fetch_hitokoto, send_signin_email};
 use crate::storage;
@@ -54,19 +65,31 @@ pub fn greet(name: &str) -> String {
 
 #[tauri::command]
 pub fn load_signin_data() -> Result<Option<SigninData>, String> {
-    storage::load_data().map_err(|e| e.to_string())
+    log::info!("Loading sign-in data");
+    storage::load_data().map_err(|e| {
+        log::error!("Failed to load sign-in data: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub async fn signin(name: String) -> Result<SigninData, String> {
-    let saved_data = storage::load_data().map_err(|e| e.to_string())?;
+    log::info!("Sign-in requested for user: {}", name);
+    let saved_data = storage::load_data().map_err(|e| {
+        log::error!("Failed to load sign-in data: {}", e);
+        e.to_string()
+    })?;
     let today = get_today_date();
 
     let new_data = calculate_signin_data(&saved_data, &name, &today)?;
-    storage::save_data(&new_data).map_err(|e| e.to_string())?;
+    storage::save_data(&new_data).map_err(|e| {
+        log::error!("Failed to save sign-in data: {}", e);
+        e.to_string()
+    })?;
 
     send_signin_notification(&name, new_data.streak).await;
 
+    log::info!("User {} signed in successfully. New streak: {} days", name, new_data.streak);
     Ok(new_data)
 }
 
@@ -78,12 +101,17 @@ fn calculate_signin_data(
 ) -> Result<SigninData, String> {
     let (new_streak, mut signin_history) = match saved_data {
         Some(data) if data.last_signin_date == today => {
+            log::info!("User {} already signed in today", name);
             return Ok(data.clone());
         }
         Some(data) if should_continue_streak(saved_data) => {
+            log::debug!("Continuing streak for user {}", name);
             (data.streak + 1, data.signin_history.clone())
         }
-        _ => (1, vec![]),
+        _ => {
+            log::debug!("Starting new streak for user {}", name);
+            (1, vec![])
+        }
     };
 
     if !signin_history.contains(&today.to_string()) {
@@ -100,23 +128,36 @@ fn calculate_signin_data(
 
 /// Send email notification for sign-in (non-blocking)
 async fn send_signin_notification(name: &str, streak: i32) {
+    log::debug!("Preparing sign-in notification for {}", name);
     let email_config = match storage::load_email_config() {
         Ok(config) if config.enabled => config,
-        _ => return,
+        Ok(_config) => {
+            log::debug!("Email notification disabled for {}", name);
+            return;
+        }
+        Err(e) => {
+            log::warn!("Failed to load email config: {}", e);
+            return;
+        }
     };
 
-    let quote = fetch_hitokoto()
-        .await
-        .unwrap_or_else(|_| get_fallback_quote());
+    let quote = fetch_hitokoto().await.unwrap_or_else(|e| {
+        log::warn!("Failed to fetch quote, using fallback: {}", e);
+        get_fallback_quote()
+    });
 
     if let Err(e) = send_signin_email(name, streak, &quote, &email_config) {
-        eprintln!("Failed to send email: {}", e);
+        log::error!("Failed to send email notification: {}", e);
     }
 }
 
 #[tauri::command]
 pub fn signout() -> Result<(), String> {
-    storage::delete_data().map_err(|e| e.to_string())
+    log::info!("User signed out, clearing all sign-in data");
+    storage::delete_data().map_err(|e| {
+        log::error!("Failed to delete sign-in data: {}", e);
+        e.to_string()
+    })
 }
 
 // =============================================================================
@@ -125,7 +166,11 @@ pub fn signout() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_daily_quote() -> Result<Quote, String> {
-    fetch_hitokoto().await
+    log::info!("Fetching daily quote");
+    fetch_hitokoto().await.map_err(|e| {
+        log::error!("Failed to fetch daily quote: {}", e);
+        e
+    })
 }
 
 // =============================================================================
@@ -134,12 +179,20 @@ pub async fn get_daily_quote() -> Result<Quote, String> {
 
 #[tauri::command]
 pub fn get_email_config() -> Result<EmailConfig, String> {
-    storage::load_email_config().map_err(|e| e.to_string())
+    log::info!("Getting email configuration");
+    storage::load_email_config().map_err(|e| {
+        log::error!("Failed to load email config: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub fn save_email_config_command(config: EmailConfig) -> Result<(), String> {
-    storage::save_email_config(&config).map_err(|e| e.to_string())
+    log::info!("Saving email configuration: enabled={}", config.enabled);
+    storage::save_email_config(&config).map_err(|e| {
+        log::error!("Failed to save email config: {}", e);
+        e.to_string()
+    })
 }
 
 // =============================================================================
@@ -148,36 +201,67 @@ pub fn save_email_config_command(config: EmailConfig) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_device_config() -> Result<DeviceConfig, String> {
-    storage::load_or_create_device_config().map_err(|e| e.to_string())
+    log::info!("Getting device configuration");
+    storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub fn set_device_mode(mode: DeviceMode) -> Result<DeviceConfig, String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Setting device mode to {:?}", mode);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
     config.device.mode = mode;
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
     Ok(config)
 }
 
 #[tauri::command]
 pub fn update_device_name(name: String) -> Result<DeviceConfig, String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
-    config.device.device_name = name;
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    log::info!("Updating device name to {}", name);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
+    config.device.device_name = name.clone();
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
+    log::info!("Device name updated successfully to {}", name);
     Ok(config)
 }
 
 #[tauri::command]
 pub fn set_device_imei(imei: String) -> Result<DeviceConfig, String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
-    config.device.imei = Some(imei);
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    log::info!("Setting device IMEI");
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
+    config.device.imei = Some(imei.clone());
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
+    log::info!("Device IMEI set successfully");
     Ok(config)
 }
 
 #[tauri::command]
 pub async fn get_device_imei() -> Result<String, String> {
-    let config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Getting device IMEI");
+    let config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
     Ok(config.device.imei.unwrap_or(config.device.device_id))
 }
 
@@ -187,9 +271,17 @@ pub async fn get_device_imei() -> Result<String, String> {
 
 #[tauri::command]
 pub fn send_supervision_request(target_device_id: String) -> Result<SupervisionRequest, String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Sending supervision request to device {}", target_device_id);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
 
     if config.device.mode != DeviceMode::Supervisor {
+        log::warn!(
+            "Non-supervisor device {} attempted to send supervision request",
+            config.device.device_id
+        );
         return Err("Only supervisor devices can send supervision requests".to_string());
     }
 
@@ -197,38 +289,62 @@ pub fn send_supervision_request(target_device_id: String) -> Result<SupervisionR
         request_id: Uuid::new_v4().to_string(),
         supervisor_device_id: config.device.device_id.clone(),
         supervisor_device_name: config.device.device_name.clone(),
-        target_device_id,
+        target_device_id: target_device_id.clone(),
         status: SupervisionRequestStatus::Pending,
         created_at: Utc::now().to_rfc3339(),
     };
 
+    log::info!(
+        "Created supervision request: {} -> {}",
+        config.device.device_id,
+        target_device_id
+    );
+
     config.supervision_requests.push(request.clone());
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
 
     Ok(request)
 }
 
 #[tauri::command]
 pub fn cancel_supervision_request(request_id: String) -> Result<(), String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Cancelling supervision request {}", request_id);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
 
     let request = config
         .supervision_requests
         .iter_mut()
         .find(|r| r.request_id == request_id)
-        .ok_or("Request not found")?;
+        .ok_or_else(|| {
+            log::warn!("Supervision request {} not found", request_id);
+            "Request not found".to_string()
+        })?;
 
     request.status = SupervisionRequestStatus::Cancelled;
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
+    log::info!("Supervision request {} cancelled successfully", request_id);
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_pending_supervision_requests() -> Result<Vec<SupervisionRequest>, String> {
-    let config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Getting pending supervision requests");
+    let config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
     let my_device_id = &config.device.device_id;
 
-    let pending = config
+    let pending: Vec<SupervisionRequest> = config
         .supervision_requests
         .iter()
         .filter(|r| {
@@ -237,22 +353,37 @@ pub fn get_pending_supervision_requests() -> Result<Vec<SupervisionRequest>, Str
         .cloned()
         .collect();
 
+    log::info!("Found {} pending supervision requests", pending.len());
     Ok(pending)
 }
 
 #[tauri::command]
 pub fn accept_supervision_request(request_id: String) -> Result<SupervisionRelationship, String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Accepting supervision request {}", request_id);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
 
     let request = find_pending_request(&config, &request_id)?;
     validate_request_target(&config, &request)?;
 
     let relationship = create_relationship_from_request(&config, &request);
+    log::info!(
+        "Creating supervision relationship: {} supervised by {}",
+        config.device.device_id,
+        request.supervisor_device_id
+    );
+
     config.supervision_relationships.push(relationship.clone());
 
     update_request_status(&mut config, &request_id, SupervisionRequestStatus::Accepted);
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
 
+    log::info!("Supervision request {} accepted successfully", request_id);
     Ok(relationship)
 }
 
@@ -266,7 +397,10 @@ fn find_pending_request(
         .iter()
         .find(|r| r.request_id == request_id && r.status == SupervisionRequestStatus::Pending)
         .cloned()
-        .ok_or_else(|| "Request not found or already processed".to_string())
+        .ok_or_else(|| {
+            log::warn!("Pending supervision request {} not found", request_id);
+            "Request not found or already processed".to_string()
+        })
 }
 
 /// Validate that the request is for this device
@@ -313,20 +447,32 @@ fn update_request_status(
 
 #[tauri::command]
 pub fn reject_supervision_request(request_id: String) -> Result<(), String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Rejecting supervision request {}", request_id);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
 
     let request = config
         .supervision_requests
         .iter_mut()
         .find(|r| r.request_id == request_id)
-        .ok_or("Request not found")?;
+        .ok_or_else(|| {
+            log::warn!("Supervision request {} not found", request_id);
+            "Request not found".to_string()
+        })?;
 
     if request.target_device_id != config.device.device_id {
+        log::warn!("Supervision request {} not for this device", request_id);
         return Err("This request is not for this device".to_string());
     }
 
     request.status = SupervisionRequestStatus::Rejected;
-    storage::save_device_config(&config).map_err(|e| e.to_string())?;
+    storage::save_device_config(&config).map_err(|e| {
+        log::error!("Failed to save device config: {}", e);
+        e.to_string()
+    })?;
+    log::info!("Supervision request {} rejected successfully", request_id);
     Ok(())
 }
 
@@ -336,7 +482,11 @@ pub fn reject_supervision_request(request_id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn remove_supervision_relationship(relationship_id: String) -> Result<(), String> {
-    let mut config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Removing supervision relationship {}", relationship_id);
+    let mut config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
 
     let initial_len = config.supervision_relationships.len();
     config
@@ -344,26 +494,39 @@ pub fn remove_supervision_relationship(relationship_id: String) -> Result<(), St
         .retain(|r| r.relationship_id != relationship_id);
 
     if config.supervision_relationships.len() < initial_len {
-        storage::save_device_config(&config).map_err(|e| e.to_string())?;
+        storage::save_device_config(&config).map_err(|e| {
+            log::error!("Failed to save device config: {}", e);
+            e.to_string()
+        })?;
+        log::info!("Supervision relationship {} removed successfully", relationship_id);
         Ok(())
     } else {
+        log::warn!("Supervision relationship {} not found", relationship_id);
         Err("Relationship not found".to_string())
     }
 }
 
 #[tauri::command]
 pub fn get_supervised_devices() -> Result<Vec<DeviceStatus>, String> {
-    let config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
-    let signin_data = storage::load_data().map_err(|e| e.to_string())?;
+    log::info!("Getting supervised devices");
+    let config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
+    let signin_data = storage::load_data().map_err(|e| {
+        log::error!("Failed to load sign-in data: {}", e);
+        e.to_string()
+    })?;
     let today = get_today_date();
 
-    let statuses = config
+    let statuses: Vec<DeviceStatus> = config
         .supervision_relationships
         .iter()
         .filter(|r| r.supervisor_device_id == config.device.device_id)
         .map(|relationship| build_device_status(relationship, &signin_data, &today))
         .collect();
 
+    log::info!("Found {} supervised devices", statuses.len());
     Ok(statuses)
 }
 
@@ -393,10 +556,14 @@ fn build_device_status(
 
 #[tauri::command]
 pub fn get_supervisor_status() -> Result<SupervisorStatus, String> {
-    let config = storage::load_or_create_device_config().map_err(|e| e.to_string())?;
+    log::info!("Getting supervisor status");
+    let config = storage::load_or_create_device_config().map_err(|e| {
+        log::error!("Failed to load device config: {}", e);
+        e.to_string()
+    })?;
     let supervised_devices = get_supervised_devices()?;
 
-    let pending_requests = config
+    let pending_requests: Vec<SupervisionRequest> = config
         .supervision_requests
         .iter()
         .filter(|r| {
@@ -406,9 +573,141 @@ pub fn get_supervisor_status() -> Result<SupervisorStatus, String> {
         .cloned()
         .collect();
 
+    log::info!(
+        "Supervisor status: {} supervised devices, {} pending requests",
+        supervised_devices.len(),
+        pending_requests.len()
+    );
+
     Ok(SupervisorStatus {
         supervisor_device_id: config.device.device_id,
         supervised_devices,
         pending_requests,
     })
+}
+
+// =============================================================================
+// Remote API Commands
+// =============================================================================
+
+#[tauri::command]
+pub async fn device_register(
+    device_name: String,
+    imei: Option<String>,
+    mode: String,
+) -> Result<RemoteDevice, String> {
+    log::info!("Registering remote device: {} (mode: {})", device_name, mode);
+    let remote_mode = match mode.as_str() {
+        "signin" => RemoteDeviceMode::Signin,
+        "supervisor" => RemoteDeviceMode::Supervisor,
+        _ => {
+            log::warn!("Invalid device mode: {}", mode);
+            return Err("Invalid device mode".to_string());
+        }
+    };
+
+    register_device(&device_name, imei.as_deref(), remote_mode).await
+}
+
+#[tauri::command]
+pub async fn device_get_info(device_id: String) -> Result<RemoteDevice, String> {
+    log::info!("Getting remote device info for {}", device_id);
+    get_device(&device_id).await
+}
+
+#[tauri::command]
+pub async fn device_update_name_api(
+    device_id: String,
+    new_name: String,
+) -> Result<RemoteDevice, String> {
+    log::info!("Updating remote device name: {} -> {}", device_id, new_name);
+    update_device_name_api(&device_id, &new_name).await
+}
+
+#[tauri::command]
+pub async fn device_signin_api(device_id: String) -> Result<SigninResponse, String> {
+    log::info!("Remote device sign-in for {}", device_id);
+    device_signin(&device_id).await
+}
+
+#[tauri::command]
+pub async fn device_search(query: String) -> Result<Vec<RemoteDevice>, String> {
+    log::info!("Searching remote devices with query: {}", query);
+    search_devices(&query).await
+}
+
+#[tauri::command]
+pub async fn supervision_request_api(
+    supervisor_id: String,
+    target_id: String,
+) -> Result<RemoteSupervisionRequest, String> {
+    log::info!("Sending remote supervision request: {} -> {}", supervisor_id, target_id);
+    send_supervision_request_api(&supervisor_id, &target_id).await
+}
+
+#[tauri::command]
+pub async fn supervision_get_pending(
+    device_id: String,
+) -> Result<Vec<RemoteSupervisionRequest>, String> {
+    log::info!("Getting pending supervision requests for remote device {}", device_id);
+    get_pending_requests(&device_id).await
+}
+
+#[tauri::command]
+pub async fn supervision_accept_api(
+    supervisor_id: String,
+    target_id: String,
+) -> Result<(), String> {
+    log::info!("Accepting remote supervision request: {} -> {}", supervisor_id, target_id);
+    accept_supervision_request_api(&supervisor_id, &target_id).await
+}
+
+#[tauri::command]
+pub async fn supervision_reject_api(
+    supervisor_id: String,
+    target_id: String,
+) -> Result<(), String> {
+    log::info!("Rejecting remote supervision request: {} -> {}", supervisor_id, target_id);
+    reject_supervision_request_api(&supervisor_id, &target_id).await
+}
+
+#[tauri::command]
+pub async fn supervision_list_api(device_id: String) -> Result<Vec<SupervisionRelation>, String> {
+    log::info!("Getting supervision list for remote device {}", device_id);
+    get_supervision_list(&device_id).await
+}
+
+#[tauri::command]
+pub async fn supervision_remove_api(relation_id: String) -> Result<(), String> {
+    log::info!("Removing remote supervision relationship {}", relation_id);
+    remove_supervision_relationship_api(&relation_id).await
+}
+
+#[tauri::command]
+pub async fn device_get_status(device_id: String) -> Result<RemoteDeviceStatus, String> {
+    log::info!("Getting remote device status for {}", device_id);
+    get_device_status(&device_id).await
+}
+
+// =============================================================================
+// Notification Commands
+// =============================================================================
+
+#[tauri::command]
+pub async fn send_notification_command(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+) -> Result<(), String> {
+    log::info!("Sending notification: {} - {}", title, body);
+
+    app.notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| {
+            log::error!("Failed to show notification: {}", e);
+            e.to_string()
+        })
 }

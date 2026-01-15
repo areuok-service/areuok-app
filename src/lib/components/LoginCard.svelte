@@ -1,7 +1,8 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
-  import type { DeviceMode } from '../api';
+
+  type DeviceMode = 'signin' | 'supervisor';
 
   interface Props {
     name: string;

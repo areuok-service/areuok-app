@@ -10,6 +10,8 @@ This is **areuok** - a desktop check-in/habit tracking application with multi-de
 - Daily sign-in tracking with streak counter
 - Multi-device supervision: devices can supervise each other's check-in status
 - Email notifications on successful check-ins with daily quotes
+- System notifications using Tauri's official notification plugin
+- Toast messages for error handling and user feedback
 - Bilingual support (English and Simplified Chinese)
 - Desktop app using Tauri with local data storage
 
@@ -237,6 +239,56 @@ Optional email notifications on sign-in:
 - Default: Gmail (smtp.gmail.com:587)
 - User must configure SMTP credentials in app settings
 - Only sends when `enabled: true` in email config
+
+### Toast & Notification System
+
+The application includes a comprehensive message notification system:
+
+**Toast Messages (Frontend):**
+- Location: `src/lib/components/Toast.svelte`, `src/lib/stores/toast.ts`
+- Displays temporary pop-up messages for user feedback
+- Supports multiple toast types: success, error, info, warning
+- Auto-dismiss after configurable duration (default 3000ms)
+- Uses Svelte 5 runes (`$state`, `$derived`)
+- Integrated throughout the application for error handling and success feedback
+
+**System Notifications (Backend):**
+- Location: `src/lib/services/notification.ts` (frontend), `src-tauri/src/commands.rs` (backend)
+- Uses Tauri's official `@tauri-apps/plugin-notification` v2
+- Sends native OS notifications (desktop and mobile)
+- Automatically requests notification permissions on first use
+- Tauri command: `send_notification_command(title, body)`
+
+**Usage Examples:**
+```typescript
+// Frontend - Show toast
+import { toastStore } from '$lib/stores/toast';
+toastStore.success('操作成功');
+toastStore.error('操作失败');
+toastStore.info('提示信息');
+toastStore.warning('警告信息');
+
+// Frontend - Send system notification
+import { notificationService } from '$lib/services/notification';
+await notificationService.success('签到成功', '你已经连续签到7天');
+await notificationService.error('签到失败', '请稍后重试');
+
+// Backend - Send notification via Tauri
+await invoke('send_notification_command', {
+  title: '签到成功',
+  body: '你已经连续签到7天'
+});
+```
+
+**Localization:**
+All toast and notification messages are i18n-ready with translations in:
+- `src/lib/i18n/en.json` - English messages
+- `src/lib/i18n/zh-CN.json` - Chinese messages
+
+Key i18n keys:
+- `error.*` - Error messages (registrationFailed, signinFailed, etc.)
+- `success.*` - Success messages (nameUpdated, requestAccepted, etc.)
+- `notification.*` - Notification permission messages
 
 ## Important Notes
 

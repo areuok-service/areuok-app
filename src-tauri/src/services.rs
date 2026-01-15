@@ -11,23 +11,29 @@ use crate::models::{EmailConfig, HitokotoResponse, Quote};
 
 /// Fetch a daily inspirational quote from hitokoto.cn API
 pub async fn fetch_hitokoto() -> Result<Quote, String> {
+    log::info!("Fetching daily quote from hitokoto.cn API");
     let client = reqwest::Client::new();
     let url = "https://v1.hitokoto.cn/";
 
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to send request: {}", e))?;
+    let response = client.get(url).send().await.map_err(|e| {
+        log::error!("Failed to send request to hitokoto.cn: {}", e);
+        format!("Failed to send request: {}", e)
+    })?;
 
-    let hitokoto_response: HitokotoResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let hitokoto_response: HitokotoResponse = response.json().await.map_err(|e| {
+        log::error!("Failed to parse hitokoto response: {}", e);
+        format!("Failed to parse response: {}", e)
+    })?;
 
     let author = hitokoto_response
         .from_who
         .unwrap_or_else(|| hitokoto_response.from.clone());
+
+    log::info!(
+        "Successfully fetched daily quote: \"{}\" - {}",
+        hitokoto_response.hitokoto,
+        author
+    );
 
     Ok(Quote {
         text: hitokoto_response.hitokoto,
@@ -43,8 +49,11 @@ pub fn send_signin_email(
     config: &EmailConfig,
 ) -> Result<(), String> {
     if !config.enabled || config.to_email.is_empty() {
+        log::debug!("Email notification disabled or recipient email not configured");
         return Ok(());
     }
+
+    log::info!("Preparing sign-in email notification for {} (streak: {} days)", name, streak);
 
     let from = parse_email_address(&config.from_email, "from")?;
     let to = parse_email_address(&config.to_email, "to")?;
@@ -58,9 +67,10 @@ pub fn send_signin_email(
 
 /// Parse and validate an email address
 fn parse_email_address(email: &str, field_name: &str) -> Result<Mailbox, String> {
-    email
-        .parse::<Mailbox>()
-        .map_err(|e| format!("Invalid {} email: {}", field_name, e))
+    email.parse::<Mailbox>().map_err(|e| {
+        log::error!("Invalid {} email address '{}': {}", field_name, email, e);
+        format!("Invalid {} email: {}", field_name, e)
+    })
 }
 
 /// Build the email body content
@@ -92,22 +102,32 @@ fn build_email_message(
         .subject(subject)
         .header(ContentType::TEXT_PLAIN)
         .body(body)
-        .map_err(|e| format!("Failed to build email: {}", e))
+        .map_err(|e| {
+            log::error!("Failed to build email message: {}", e);
+            format!("Failed to build email: {}", e)
+        })
 }
 
 /// Send email via SMTP
 fn send_via_smtp(email: Message, config: &EmailConfig) -> Result<(), String> {
+    log::debug!("Connecting to SMTP server: {}:{}", config.smtp_server, config.smtp_port);
+
     let credentials = Credentials::new(config.smtp_username.clone(), config.smtp_password.clone());
 
     let mailer = SmtpTransport::starttls_relay(&config.smtp_server)
-        .map_err(|e| format!("Failed to create SMTP relay: {}", e))?
+        .map_err(|e| {
+            log::error!("Failed to create SMTP relay for {}: {}", config.smtp_server, e);
+            format!("Failed to create SMTP relay: {}", e)
+        })?
         .port(config.smtp_port)
         .credentials(credentials)
         .build();
 
-    mailer
-        .send(&email)
-        .map_err(|e| format!("Failed to send email: {}", e))?;
+    mailer.send(&email).map_err(|e| {
+        log::error!("Failed to send email via SMTP: {}", e);
+        format!("Failed to send email: {}", e)
+    })?;
 
+    log::info!("Successfully sent sign-in email notification to {}", config.to_email);
     Ok(())
 }

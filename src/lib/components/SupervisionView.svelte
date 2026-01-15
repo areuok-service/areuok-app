@@ -1,6 +1,31 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
-  import type { Device, DeviceStatus } from '../api';
+
+  type Device = {
+    device_id: string;
+    device_name: string;
+    imei?: string;
+    mode: 'signin' | 'supervisor';
+    created_at: string;
+    last_seen_at: string;
+    last_name_updated_at?: string;
+  };
+
+  type DeviceStatus = {
+    device_id: string;
+    device_name: string;
+    mode: 'signin' | 'supervisor';
+    last_signin?: string;
+    streak: number;
+  };
+
+  // Helper function to check if signed in today
+  function isSignedInToday(lastSignin?: string): boolean {
+    if (!lastSignin) return false;
+    const signinDate = new Date(lastSignin);
+    const today = new Date();
+    return signinDate.toDateString() === today.toDateString();
+  }
 
   interface Props {
     searchQuery: string;
@@ -123,7 +148,7 @@
             <p class="device-id-display">{$_('supervision.deviceId')}: {device.device_id}</p>
             <p class="streak-info">{$_('supervision.streak', { values: { streak: device.streak } })}</p>
             <p class="status">
-              {#if device.signed_in_today}
+              {#if isSignedInToday(device.last_signin)}
                 <span class="status-badge status-checked-in">✓ {$_('supervision.checkedInToday')}</span>
               {:else}
                 <span class="status-badge status-not-checked-in">✗ {$_('supervision.notCheckedInToday')}</span>

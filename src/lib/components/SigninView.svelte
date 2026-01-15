@@ -1,7 +1,16 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { scale } from 'svelte/transition';
-  import type { SupervisionRequest } from '../api';
+
+  type SupervisionRequest = {
+    request_id: string;
+    supervisor_id: string;
+    supervisor_name?: string;
+    target_id: string;
+    target_name?: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    created_at: string;
+  };
 
   interface Props {
     streak: number;
